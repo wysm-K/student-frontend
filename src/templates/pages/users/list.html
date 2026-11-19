@@ -1,0 +1,243 @@
+<!--
+  用户管理列表页模板（教学用）
+  - x-data 名称必须和 list.page.ts 里 Alpine.data('userListComponent', ...) 一致
+  - 创建/编辑表单用 x-show，不要用 template x-if 包多个并列 div（会丢密码框）
+  - 字段顺序建议与 Swagger CreateUserRequest / UpdateUserRequest 对照
+  文档：docs/用户管理前端CRUD全流程.md
+-->
+<div x-data="userListComponent()" x-init="init()" class="users-page">
+  <div class="page-header">
+    <h2 class="page-title">用户管理</h2>
+    <div class="page-actions">
+      <button class="btn btn-primary btn-sm" @click="openCreate()">新增用户</button>
+      <button class="btn btn-ghost btn-sm" @click="refresh()">刷新</button>
+    </div>
+  </div>
+
+  <div class="card search-box" style="margin-bottom: 1rem">
+    <div class="search-form" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+      <input
+        type="text"
+        x-model="filters.username"
+        @keyup.enter="search()"
+        class="input-base"
+        style="width: 180px"
+        placeholder="用户名"
+      >
+      <select x-model="filters.role" class="input-base" style="width: 140px">
+        <option value="">全部角色</option>
+        <template x-for="role in roleOptions" :key="role">
+          <option :value="role" x-text="getRoleLabel(role)"></option>
+        </template>
+      </select>
+      <select x-model="filters.status" class="input-base" style="width: 110px">
+        <option value="">全部状态</option>
+        <option value="1">正常</option>
+        <option value="0">禁用</option>
+      </select>
+      <button class="btn btn-primary btn-sm" @click="search()">搜索</button>
+      <button class="btn btn-ghost btn-sm" @click="reset()">重置</button>
+    </div>
+  </div>
+
+  <div id="table-container">
+    <template x-if="error">
+      <div class="card state-box">
+        <p class="text-danger" x-text="error"></p>
+      </div>
+    </template>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>用户名</th>
+            <th>姓名/昵称</th>
+            <th>角色</th>
+            <th>邮箱</th>
+            <th>手机号</th>
+            <th>状态</th>
+            <th>创建时间</th>
+            <th style="width: 120px">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-if="loading">
+            <tr>
+              <td colspan="9" class="table-loading">加载中…</td>
+            </tr>
+          </template>
+
+          <template x-if="!loading && !error && data.length === 0">
+            <tr>
+              <td colspan="9" class="table-empty">暂无用户数据</td>
+            </tr>
+          </template>
+
+          <template x-if="!loading && !error && data.length > 0">
+            <template x-for="row in data" :key="row.id">
+              <tr>
+                <td x-text="row.id"></td>
+                <td x-text="row.username"></td>
+                <td x-text="row.displayName"></td>
+                <td><span class="badge badge-blue" x-text="getRoleLabel(row.role)"></span></td>
+                <td x-text="row.email"></td>
+                <td x-text="row.phone"></td>
+                <td>
+                  <span
+                    class="badge"
+                    :class="row.status === 1 ? 'badge-green' : 'badge-gray'"
+                    x-text="getStatusLabel(row.status)"
+                  ></span>
+                </td>
+                <td x-text="row.createdAt?.slice(0, 10)"></td>
+                <td>
+                  <div style="display: flex; gap: 6px">
+                    <button class="btn btn-ghost btn-sm" @click="openEdit(row)">编辑</button>
+                    <button
+                      class="btn btn-ghost btn-sm"
+                      style="color: var(--color-danger)"
+                      @click="handleDisable(row)"
+                      x-show="row.status === 1"
+                    >禁用</button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </template>
+        </tbody>
+      </table>
+
+      <div class="pagination">
+        <span x-text="'共 ' + total + ' 条，第 ' + page + '/' + totalPages + ' 页'"></span>
+        <div class="pagination-btns">
+          <button
+            class="btn btn-ghost btn-sm"
+            @click="goToPage(page - 1)"
+            :disabled="page <= 1"
+          >上一页</button>
+          <button
+            class="btn btn-ghost btn-sm"
+            @click="goToPage(page + 1)"
+            :disabled="page >= totalPages"
+          >下一页</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增/编辑对话框（用 x-show，避免 template x-if 多根节点导致字段丢失） -->
+  <div
+    x-show="dialogMode"
+    x-cloak
+    class="dialog-overlay"
+    @click.self="closeDialog()"
+    style="display: none"
+  >
+    <div class="dialog" @click.stop>
+      <div class="dialog-header">
+        <h3 x-text="dialogTitle"></h3>
+        <button type="button" class="dialog-close" @click="closeDialog()">✕</button>
+      </div>
+      <div class="dialog-body" style="display: flex; flex-direction: column; gap: 14px">
+        <!-- 创建：POST /users — 字段对齐 Swagger CreateUserRequest（username/password/role 必填） -->
+        <div x-show="dialogMode === 'create'" style="display: flex; flex-direction: column; gap: 14px">
+          <div class="form-group">
+            <label class="form-label">用户名 <span style="color: var(--color-danger)">*</span></label>
+            <input
+              type="text"
+              class="input-base"
+              x-model="form.username"
+              autocomplete="off"
+              placeholder="3-50 个字符"
+            >
+          </div>
+          <div class="form-group">
+            <label class="form-label">密码 <span style="color: var(--color-danger)">*</span></label>
+            <input
+              type="password"
+              class="input-base"
+              x-model="form.password"
+              autocomplete="new-password"
+              placeholder="6-100 个字符"
+            >
+          </div>
+          <div class="form-group">
+            <label class="form-label">显示名称</label>
+            <input type="text" class="input-base" x-model="form.displayName" placeholder="不填则默认同用户名">
+          </div>
+          <div class="form-group">
+            <label class="form-label">角色 <span style="color: var(--color-danger)">*</span></label>
+            <select class="input-base" x-model="form.role">
+              <template x-for="role in roleOptions" :key="role">
+                <option :value="role" x-text="getRoleLabel(role)"></option>
+              </template>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">邮箱</label>
+            <input type="email" class="input-base" x-model="form.email">
+          </div>
+          <div class="form-group">
+            <label class="form-label">手机号</label>
+            <input type="tel" class="input-base" x-model="form.phone">
+          </div>
+        </div>
+
+        <!-- 编辑：PUT /users/{id} — UpdateUserRequest -->
+        <div x-show="dialogMode === 'edit'" style="display: flex; flex-direction: column; gap: 14px">
+          <div class="form-group">
+            <label class="form-label">用户名</label>
+            <input type="text" class="input-base" x-model="form.username" disabled>
+          </div>
+          <div class="form-group">
+            <label class="form-label">显示名称 <span style="color: var(--color-danger)">*</span></label>
+            <input type="text" class="input-base" x-model="form.displayName">
+          </div>
+          <div class="form-group">
+            <label class="form-label">角色 <span style="color: var(--color-danger)">*</span></label>
+            <select class="input-base" x-model="form.role">
+              <template x-for="role in roleOptions" :key="role">
+                <option :value="role" x-text="getRoleLabel(role)"></option>
+              </template>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">邮箱</label>
+            <input type="email" class="input-base" x-model="form.email">
+          </div>
+          <div class="form-group">
+            <label class="form-label">手机号</label>
+            <input type="tel" class="input-base" x-model="form.phone">
+          </div>
+          <div class="form-group">
+            <label class="form-label">状态</label>
+            <select class="input-base" x-model.number="form.status">
+              <option :value="1">正常</option>
+              <option :value="0">禁用</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">新密码</label>
+            <input
+              type="password"
+              class="input-base"
+              x-model="form.password"
+              autocomplete="new-password"
+              placeholder="不填则不修改"
+            >
+          </div>
+        </div>
+
+        <p class="form-error" x-show="formError" x-text="formError"></p>
+      </div>
+      <div class="dialog-footer">
+        <button type="button" class="btn btn-ghost btn-sm" @click="closeDialog()" :disabled="submitting">取消</button>
+        <button type="button" class="btn btn-primary btn-sm" @click="submitForm()" :disabled="submitting">
+          <span x-text="submitting ? '提交中…' : '保存'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

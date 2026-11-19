@@ -1,0 +1,47 @@
+.warehouses-page__search-box {
+  margin-bottom: 1rem;
+}
+
+.warehouses-page__search-input {
+  width: 200px;
+}
+
+.warehouses-page__search-type {
+  width: 120px;
+}
+
+.warehouses-page__search-status {
+  width: 100px;
+}
+
+.warehouses-page__delete-btn {
+  color: var(--color-danger);
+}
+
+.warehouses-page__dialog {
+  max-width: 500px;
+}
+
+.warehouses-page__required {
+  color: var(--color-danger);
+}
+
+.warehouses-page__error {
+  color: var(--color-danger);
+}
+
+.warehouses-page__tree {
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.warehouses-page__zone {
+  margin-top: 0.75rem;
+}
+
+.warehouses-page__locations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
